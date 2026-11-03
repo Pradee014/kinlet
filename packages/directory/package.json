@@ -1,0 +1,26 @@
+{
+  "name": "@kinlet/directory",
+  "version": "0.1.0",
+  "description": "Kinlet directory: card registration, signed status answers, revocation, activity events.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": { "kinlet-directory": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@kinlet/core": "workspace:*",
+    "better-sqlite3": "^11.7.0",
+    "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12"
+  }
+}

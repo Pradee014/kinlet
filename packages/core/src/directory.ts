@@ -3,10 +3,9 @@
  * See docs/CARD_FORMAT.md sections 6 to 8.
  */
 import { z } from "zod";
-import { utf8Encode } from "./encoding.js";
+import { base64urlEncode, hexEncode, utf8Encode } from "./encoding.js";
 import { sha256, type Signer } from "./crypto.js";
 import { jcs, ProofSchema, signDocument, verifyDocument, type Signed } from "./proof.js";
-import { hexEncode } from "./encoding.js";
 import type { ActionSpec } from "./request.js";
 
 const serial = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/);
@@ -137,4 +136,14 @@ export async function checkEvent(
   const proof = await verifyDocument(e, expected.agentDid);
   if (!proof.ok) return { ok: false, detail: proof.reason };
   return { ok: true, event: e, hash: await eventHash(e) };
+}
+
+// ---- Owner proof (person authenticating to the directory to read their own data) ----
+
+/** Header value proving control of an issuer DID: base64url of a signed, time-stamped statement. */
+export async function createOwnerProof(issuer: Signer, now: Date = new Date()): Promise<string> {
+  const signed = await signDocument({ type: "KinletOwnerProof" as const, issuer: issuer.did, at: now.toISOString() }, issuer, { purpose: "authentication", created: now });
+  const json = JSON.stringify(signed);
+  const bytes = utf8Encode(json);
+  return base64urlEncode(bytes);
 }
