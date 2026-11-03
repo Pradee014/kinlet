@@ -3,6 +3,7 @@
  * Every answer about a card's status is signed by the directory key.
  */
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 import {
   checkCard,
@@ -62,6 +63,8 @@ export function createDirectoryApp(opts: DirectoryOptions): Hono {
   const limiter = new RateLimiter(opts.writeRatePerMinute ?? 120);
   const app = new Hono();
 
+  // The directory is a public API of signed documents; any web origin may call it.
+  app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "OPTIONS"], allowHeaders: ["content-type", "kinlet-owner-proof"], maxAge: 600 }));
   app.use("*", async (c, next) => {
     await next();
     c.header("Cache-Control", "no-store");

@@ -18,11 +18,16 @@ const didKey = z.string().regex(/^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$/, "must 
 const rfc3339 = z.string().datetime({ offset: false });
 const serialRe = /^[0-9A-HJKMNP-TV-Z]{20}$/;
 
-/** An HTTPS origin: scheme + host + optional port, nothing else. */
+/**
+ * An HTTPS origin: scheme + host + optional port, nothing else.
+ * Plain http is accepted only for localhost and 127.0.0.1, so the demo can run on one machine.
+ */
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const httpsOrigin = z.string().refine((s) => {
   try {
     const u = new URL(s);
-    return u.protocol === "https:" && u.origin === s && u.username === "" && u.password === "";
+    const schemeOk = u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK.has(u.hostname));
+    return schemeOk && u.origin === s && u.username === "" && u.password === "";
   } catch {
     return false;
   }
@@ -71,7 +76,7 @@ export const CardSchema = z
     credentialStatus: z
       .object({
         type: z.literal("KinletDirectoryStatus"),
-        directory: httpsOrigin.or(z.string().url().startsWith("http://localhost").or(z.string().url().startsWith("http://127.0.0.1"))),
+        directory: httpsOrigin,
         serial: z.string().regex(serialRe),
       })
       .strict(),

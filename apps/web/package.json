@@ -1,0 +1,31 @@
+{
+  "name": "@kinlet/web",
+  "version": "0.1.0",
+  "description": "Kinlet card office: the web app a person uses to issue, watch and revoke their agents' cards.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm build:client && pnpm build:server",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "test": "vitest run",
+    "start": "node dist/server/index.js",
+    "dev": "vite",
+    "test:browser": "node test/browser.e2e.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@kinlet/core": "workspace:*",
+    "@simplewebauthn/browser": "^13.1.0",
+    "@simplewebauthn/server": "^13.1.0",
+    "better-sqlite3": "^11.7.0",
+    "hono": "^4.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "vite": "^6.0.0",
+    "@kinlet/mcp": "workspace:*"
+  }
+}

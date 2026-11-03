@@ -1,0 +1,24 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; --accent: #2457d6; --danger: #b3261e; --ok: #1b7f4b; --card: #f7f7f8; }
+@media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #eee; --muted: #999; --line: #333; --accent: #7aa2ff; --danger: #ff6b61; --ok: #5fcf8a; --card: #1b1b1d; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); }
+#app { max-width: 480px; margin: 0 auto; padding: 16px; padding-bottom: 48px; }
+h1 { font-size: 22px; margin: 8px 0 16px; } h2 { font-size: 18px; margin: 20px 0 8px; } h3 { font-size: 16px; margin: 12px 0 4px; }
+p, li { margin: 6px 0; } .muted { color: var(--muted); font-size: 14px; }
+a { color: var(--accent); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 10px 0; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+button { font: inherit; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+button:disabled { opacity: .5; cursor: default; }
+input, select { font: inherit; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+label { display: block; margin: 10px 0 4px; font-size: 14px; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+.pill.ok { color: var(--ok); border-color: var(--ok); } .pill.bad { color: var(--danger); border-color: var(--danger); }
+.err { color: var(--danger); } .ok { color: var(--ok); }
+pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+.banner { position: sticky; top: 0; z-index: 2; background: var(--accent); color: #fff; padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; }
+.banner button { background: #fff; color: var(--accent); border-color: #fff; }
+.feed li { list-style: none; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.nav { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; font-size: 14px; }
