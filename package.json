@@ -12,7 +12,9 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "demo": "node scripts/demo.mjs",
+    "test:browser": "pnpm --filter @kinlet/web test:browser"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

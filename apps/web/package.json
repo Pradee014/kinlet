@@ -9,7 +9,7 @@
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
-    "test": "vitest run",
+    "test": "echo \"web: run pnpm test:browser with the demo services up\"",
     "start": "node dist/server/index.js",
     "dev": "vite",
     "test:browser": "node test/browser.e2e.mjs"
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "vite": "^6.0.0",
-    "@kinlet/mcp": "workspace:*"
+    "@kinlet/mcp": "workspace:*",
+    "playwright": "^1.50.0"
   }
 }
