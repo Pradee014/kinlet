@@ -7,7 +7,7 @@ COPY packages ./packages
 COPY apps ./apps
 RUN pnpm install --frozen-lockfile
 RUN pnpm -r build
-RUN pnpm prune --prod
+RUN CI=true pnpm install --prod --frozen-lockfile --force
 
 # Runtime stage.
 FROM node:22-bookworm-slim
