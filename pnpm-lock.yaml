@@ -32,6 +32,9 @@ importers:
       '@kinlet/directory':
         specifier: workspace:*
         version: link:../../packages/directory
+      '@kinlet/remote':
+        specifier: workspace:*
+        version: link:../../packages/remote
       '@kinlet/web':
         specifier: workspace:*
         version: link:../web
@@ -137,6 +140,37 @@ importers:
       '@kinlet/directory':
         specifier: workspace:*
         version: link:../directory
+
+  packages/remote:
+    dependencies:
+      '@kinlet/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kinlet/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.0
+        version: 1.32.2(zod@3.25.76)
+      better-sqlite3:
+        specifier: ^11.7.0
+        version: 11.10.0
+      hono:
+        specifier: ^4.6.0
+        version: 4.13.16
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@kinlet/demo-merchant':
+        specifier: workspace:*
+        version: link:../demo-merchant
+      '@kinlet/directory':
+        specifier: workspace:*
+        version: link:../directory
+      '@types/better-sqlite3':
+        specifier: ^7.6.12
+        version: 7.6.13
 
 packages:
 

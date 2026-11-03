@@ -100,7 +100,8 @@ async function afterSignIn(): Promise<void> {
   const user = state.session.user;
   if (!user) return screenSignIn();
   state.root = await loadOrCreateRootKey(user.id);
-  go("#/");
+  if (!location.hash || location.hash === "#/") go("#/");
+  else await route();
   void pollApprovals();
 }
 
@@ -149,11 +150,34 @@ async function screenHome(): Promise<void> {
       return `<a class="card row" href="#/agent/${a.serial}" style="text-decoration:none;color:inherit"><div><strong>${esc(card.credentialSubject.name)}</strong><div class="muted">${esc(card.credentialSubject.permissions.services.map((s) => new URL(s).host).join(", "))}</div></div>${pill}</a>`;
     })
     .join("");
-  render(`${nav()}${approvalsBanner()}<h1>Your agents</h1>${items || `<p class="muted">No agents yet. Create one to give an AI an ID card.</p>`}<p><button id="new" class="primary">+ Create agent</button></p>
+  let connections: { id: string; serial: string; client: string; createdAt: string; revokedAt: string | null }[] = [];
+  try {
+    connections = ((await (await fetch("/connections", { credentials: "same-origin" })).json()) as { connections: typeof connections }).connections.filter((c) => !c.revokedAt);
+  } catch {
+    /* hosted connections unavailable (local demo without the all-in-one server) */
+  }
+  const names = new Map(list.map((a) => [a.serial, (a.card as Card).credentialSubject.name]));
+  const conns = connections
+    .map((c) => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><div>${esc(c.client)} → <a href="#/agent/${c.serial}">${esc(names.get(c.serial) ?? c.serial)}</a></div><button data-disconnect="${c.id}">Disconnect</button></div>`)
+    .join("");
+  const mcpUrl = state.config.origin + "/mcp";
+  render(`${nav()}${approvalsBanner()}<h1>Your agents</h1>${items || `<p class="muted">No agents yet.</p>`}<p><button id="new" class="primary">+ Create agent</button></p>
+  <h2>Connect to Claude</h2>
+  <div class="card"><p>In Claude (web, desktop or mobile): <strong>Settings → Connectors → Add custom connector</strong>, paste this address, and sign in here when asked.</p><pre id="mcpurl">${esc(mcpUrl)}</pre><button id="copyMcp">Copy address</button>
+  ${conns ? `<h3>Connected</h3>${conns}` : `<p class="muted">Nothing connected yet.</p>`}</div>
   <p class="muted">Your ID: <code>${esc(state.root?.did.slice(0, 24))}…</code> (kept on this device)</p>`);
   bindNav();
   bindBanner();
   document.getElementById("new")!.onclick = () => go("#/new");
+  document.getElementById("copyMcp")!.onclick = () => navigator.clipboard.writeText(mcpUrl);
+  document.querySelectorAll<HTMLButtonElement>("[data-disconnect]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        if (!confirm("Disconnect? Claude will lose access immediately. The agent's card stays; cancel it from the agent's page if you want it gone too.")) return;
+        await fetch(`/connections/${b.dataset["disconnect"]}/revoke`, { method: "POST", credentials: "same-origin" });
+        await screenHome();
+      }),
+  );
 }
 
 const TEMPLATES: Record<string, { label: string; perms: (service: string) => Permissions }> = {
@@ -168,12 +192,42 @@ const TEMPLATES: Record<string, { label: string; perms: (service: string) => Per
   },
 };
 
+interface NewAgentForm {
+  name: string;
+  template: string;
+  service: string;
+  days: number;
+  custom?: { actions: string[]; currency: string; perAction: number; perDay: number; above: number };
+}
+
+/** Creates the agent key, issues and registers the card, stores it locally. Returns the serial and the one-time credential. */
+async function createAgent(f: NewAgentForm): Promise<{ serial: string; credential: string }> {
+  const service = new URL(f.service).origin;
+  let permissions: Permissions;
+  if (f.template === "custom" && f.custom) {
+    permissions = { services: [service], actions: f.custom.actions, limits: { currency: f.custom.currency, perAction: f.custom.perAction, perDay: f.custom.perDay }, approval: { above: f.custom.above } };
+  } else {
+    permissions = (TEMPLATES[f.template] ?? TEMPLATES["shopping"]!).perms(service);
+  }
+  const days = Math.min(90, Math.max(1, f.days || 30));
+  const agentKey = await generateKeyPair({ extractable: true });
+  const card = await issueCard({ issuer: owner(), agentDid: agentKey.did, name: f.name || "My agent", permissions, directory: state.config.directoryUrl, validUntil: new Date(Date.now() + days * 86_400_000) });
+  await state.dir.register(card);
+  const credential = { version: 1, card, agent: { publicKey: base64urlEncode(agentKey.publicKey), privateKeyPkcs8: base64urlEncode(await exportPrivateKeyOnce(agentKey)) } };
+  await agents.put({ serial: card.credentialStatus.serial, card, createdAt: new Date().toISOString() });
+  return { serial: card.credentialStatus.serial, credential: base64urlEncode(utf8Encode(JSON.stringify(credential))) };
+}
+
+function templateOptions(): string {
+  return Object.entries(TEMPLATES).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join("") + `<option value="custom">Custom</option>`;
+}
+
 async function screenNew(): Promise<void> {
   const actionBoxes = STANDARD_ACTIONS.map((a) => `<label style="display:inline-block;margin-right:12px"><input type="checkbox" name="act" value="${a}" style="width:auto"/> ${a}</label>`).join("");
   render(`${nav()}<h1>Create agent</h1>
   <div class="card">
     <label>Name</label><input id="name" placeholder="Shopping agent" maxlength="80"/>
-    <label>Template</label><select id="tpl">${Object.entries(TEMPLATES).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join("")}<option value="custom">Custom</option></select>
+    <label>Template</label><select id="tpl">${templateOptions()}</select>
     <label>Allowed service (origin)</label><input id="service" value="${esc(state.config.merchantUrl)}"/>
     <div id="custom" style="display:none">
       <label>Actions</label><div>${actionBoxes}</div>
@@ -199,24 +253,67 @@ async function screenNew(): Promise<void> {
     const btn = document.getElementById("create") as HTMLButtonElement;
     btn.disabled = true;
     try {
-      const name = val("name") || "My agent";
-      const service = new URL(val("service")).origin;
-      let permissions: Permissions;
+      const form: NewAgentForm = { name: val("name"), template: tpl.value, service: val("service"), days: Number(val("days")) };
       if (tpl.value === "custom") {
-        const actions = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="act"]:checked')).map((i) => i.value);
-        const limits = { currency: val("cur").toUpperCase(), perAction: Number(val("perAction")), perDay: Number(val("perDay")) };
-        permissions = { services: [service], actions, limits, approval: { above: Number(val("above")) } };
-      } else {
-        permissions = TEMPLATES[tpl.value]!.perms(service);
+        form.custom = {
+          actions: Array.from(document.querySelectorAll<HTMLInputElement>('input[name="act"]:checked')).map((i) => i.value),
+          currency: val("cur").toUpperCase(),
+          perAction: Number(val("perAction")),
+          perDay: Number(val("perDay")),
+          above: Number(val("above")),
+        };
       }
-      const days = Math.min(90, Math.max(1, Number(val("days")) || 30));
-      const agentKey = await generateKeyPair({ extractable: true });
-      const card = await issueCard({ issuer: owner(), agentDid: agentKey.did, name, permissions, directory: state.config.directoryUrl, validUntil: new Date(Date.now() + days * 86_400_000) });
-      await state.dir.register(card);
-      const credential = { version: 1, card, agent: { publicKey: base64urlEncode(agentKey.publicKey), privateKeyPkcs8: base64urlEncode(await exportPrivateKeyOnce(agentKey)) } };
-      freshCredentials.set(card.credentialStatus.serial, base64urlEncode(utf8Encode(JSON.stringify(credential))));
-      await agents.put({ serial: card.credentialStatus.serial, card, createdAt: new Date().toISOString() });
-      go(`#/connect/${card.credentialStatus.serial}`);
+      const { serial, credential } = await createAgent(form);
+      freshCredentials.set(serial, credential);
+      go(`#/connect/${serial}`);
+    } catch (e) {
+      msg.textContent = err(e);
+      btn.disabled = false;
+    }
+  };
+}
+
+/** OAuth consent: an MCP client (Claude) is asking to connect. The person creates the agent it will use. */
+async function screenConnectClaude(reqId: string): Promise<void> {
+  let pending: { clientName: string; redirectHost: string };
+  try {
+    const res = await fetch(`/oauth/pending/${encodeURIComponent(reqId)}`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(res.status === 404 ? "This connection request has expired. Start again from Claude." : `HTTP ${res.status}`);
+    pending = (await res.json()) as { clientName: string; redirectHost: string };
+  } catch (e) {
+    render(`${nav()}<h1>Connect</h1><p class="err">${esc(err(e))}</p><p><a href="#/">Home</a></p>`);
+    bindNav();
+    return;
+  }
+  render(`${nav()}<h1>Connect to ${esc(pending.clientName)}</h1>
+  <div class="card">
+    <p><strong>${esc(pending.clientName)}</strong> (${esc(pending.redirectHost)}) wants to act for you. It will get its own ID card with the limits you choose. It never gets your passwords, cards or your ID.</p>
+    <label>Name for this agent</label><input id="name" value="${esc(pending.clientName)} agent" maxlength="80"/>
+    <label>What it may do</label><select id="tpl">${templateOptions().replace('<option value="custom">Custom</option>', "")}</select>
+    <label>Allowed service (origin)</label><input id="service" value="${esc(state.config.merchantUrl)}"/>
+    <label>Valid for (days, max 90)</label><input id="days" type="number" value="30" min="1" max="90"/>
+    <p class="muted">Approving needs your passkey. You can cancel this card at any time from the agent's page.</p>
+    <div class="row"><button id="approve" class="primary">Connect</button><button id="deny">Don't connect</button></div>
+    <p id="msg" class="err"></p>
+  </div>`);
+  bindNav();
+  const msg = document.getElementById("msg") as HTMLParagraphElement;
+  const val = (id: string) => (document.getElementById(id) as HTMLInputElement).value.trim();
+  const finish = async (body: { id: string; decision: "approved" | "denied"; credential?: string }) => {
+    const res = await fetch("/oauth/approve", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`could not finish: HTTP ${res.status}`);
+    const { redirect } = (await res.json()) as { redirect: string };
+    render(`<h1>Connected</h1><p>Returning you to ${esc(pending.clientName)}…</p><p><a href="${esc(redirect)}">Continue</a></p>`);
+    location.assign(redirect);
+  };
+  document.getElementById("deny")!.onclick = () => finish({ id: reqId, decision: "denied" }).catch((e) => (msg.textContent = err(e)));
+  document.getElementById("approve")!.onclick = async () => {
+    const btn = document.getElementById("approve") as HTMLButtonElement;
+    btn.disabled = true;
+    msg.textContent = "";
+    try {
+      const { credential } = await createAgent({ name: val("name"), template: (document.getElementById("tpl") as HTMLSelectElement).value, service: val("service"), days: Number(val("days")) });
+      await finish({ id: reqId, decision: "approved", credential });
     } catch (e) {
       msg.textContent = err(e);
       btn.disabled = false;
@@ -234,7 +331,7 @@ async function screenConnect(serial: string): Promise<void> {
     bindNav();
     return;
   }
-  const claudeDesktop = JSON.stringify({ mcpServers: { kinlet: { command: "npx", args: ["-y", "@kinlet/mcp"], env: { KINLET_AGENT: "<paste the code>" } } } }, null, 2);
+  const claudeDesktop = JSON.stringify({ mcpServers: { kinlet: { command: "node", args: ["/path/to/kinlet/packages/mcp/dist/cli.js"], env: { KINLET_AGENT_FILE: "/path/to/kinlet-agent.txt" } } } }, null, 2);
   render(`${nav()}<h1>Connect ${esc(card.credentialSubject.name)}</h1>
   <div class="card">
     <p><strong>This code is shown once.</strong> It is the agent's own key plus its card. Paste it into your AI tool, then come back and tap "I saved it".</p>
@@ -242,7 +339,8 @@ async function screenConnect(serial: string): Promise<void> {
     <div class="row"><button id="copy" class="primary">Copy code</button><button id="dl">Download file</button></div>
   </div>
   <h2>Where to paste it</h2>
-  <div class="card"><h3>Claude Code</h3><pre>claude mcp add kinlet -e KINLET_AGENT=&lt;paste the code&gt; -- npx -y @kinlet/mcp</pre></div>
+  <p class="muted">Easier: on the home screen, use "Connect to Claude" instead and skip this code entirely. The code is for running the agent on your own machine.</p>
+  <div class="card"><h3>Claude Code</h3><pre>claude mcp add kinlet -e KINLET_AGENT_FILE=/path/to/kinlet-agent.txt -- node /path/to/kinlet/packages/mcp/dist/cli.js</pre></div>
   <div class="card"><h3>Claude Desktop, Cursor, other MCP apps</h3><pre>${esc(claudeDesktop)}</pre></div>
   <p><button id="done" class="primary">I saved it</button></p>`);
   bindNav();
@@ -378,10 +476,11 @@ async function route(): Promise<void> {
   if (!state.session.user) return screenSignIn();
   if (!state.root) state.root = await loadOrCreateRootKey(state.session.user.id);
   const h = location.hash || "#/";
-  const m = /^#\/(new|connect|agent|approvals)?\/?([^/]*)/.exec(h);
+  const m = /^#\/(connect-claude|new|connect|agent|approvals)?\/?([^/]*)/.exec(h);
   const screen = m?.[1] ?? "";
   const arg = m?.[2] ?? "";
   try {
+    if (screen === "connect-claude") return await screenConnectClaude(arg);
     if (screen === "new") return await screenNew();
     if (screen === "connect") return await screenConnect(arg);
     if (screen === "agent") return await screenAgent(arg);

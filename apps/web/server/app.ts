@@ -67,3 +67,12 @@ export function createWebApp(opts: WebAppOptions): Hono {
   }
   return app;
 }
+
+/** Resolves the signed-in user id from a raw Request's session cookie. Used by sibling apps (remote MCP). */
+export function sessionUserId(store: WebStore, req: Request): string | undefined {
+  const cookie = req.headers.get("cookie") ?? "";
+  const m = /(?:^|;\s*)kinlet_session=([^;]+)/.exec(cookie);
+  if (!m) return undefined;
+  const s = store.getSession(decodeURIComponent(m[1] as string));
+  return s?.userId;
+}

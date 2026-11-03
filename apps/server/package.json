@@ -16,6 +16,7 @@
     "@kinlet/demo-merchant": "workspace:*",
     "@kinlet/directory": "workspace:*",
     "@kinlet/web": "workspace:*",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "@kinlet/remote": "workspace:*"
   }
 }

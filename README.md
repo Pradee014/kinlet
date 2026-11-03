@@ -16,6 +16,8 @@ People hand AI agents their real passwords, cards and accounts. A hijacked agent
 | `packages/directory` | The directory service: registers cards, answers signed status queries, records revocations and hash-chained activity events, relays approval requests. SQLite. |
 | `packages/mcp` | The plug-in any MCP-capable agent runs. Holds the agent key, signs requests, asks the owner for approval when the card says so, reports every attempt. Exposes three tools: `kinlet_card`, `kinlet_check`, `kinlet_act`. |
 | `packages/demo-merchant` | A tiny shop. Its whole Kinlet integration is one `verifyIncomingRequest` call. |
+| `packages/remote` | Hosted MCP endpoint with OAuth 2.1 (PKCE, dynamic client registration): Claude connects by URL and the person signs in with a passkey. Agent credentials held encrypted per connection. |
+| `apps/server` | The deployable: card office, directory (`/d`), demo shop (`/shop`) and the hosted MCP endpoint (`/mcp`) on one origin. Dockerfile and Fly.io config included. |
 | `apps/web` | The card office: passkey sign-in, create agent, one-time connect code, approvals, activity feed, cancel. The root key is a non-extractable WebCrypto key in the browser. |
 | `docs/` | [Threat model](docs/THREAT_MODEL.md) and the [card format specification](docs/CARD_FORMAT.md). |
 
@@ -29,7 +31,13 @@ pnpm -r build
 pnpm demo          # starts directory :7001, demo shop :7002, card office :7000
 ```
 
-Open http://localhost:7000, create an account (a passkey; on a laptop without biometrics your browser will offer a PIN or a phone), tap "Create agent", pick the Shopping template, and copy the connect code. Then give it to an agent:
+For the one-process version that gets deployed (card office, directory, shop and hosted MCP on one origin):
+
+```sh
+node apps/server/dist/index.js   # http://localhost:8080
+```
+
+Open http://localhost:7000 (or :8080), create an account (a passkey; on a laptop without biometrics your browser will offer a PIN or a phone), tap "Create agent", pick the Shopping template, and copy the connect code. Then give it to an agent:
 
 ```sh
 claude mcp add kinlet -e KINLET_AGENT=<paste the code> -- node packages/mcp/dist/cli.js
@@ -37,11 +45,20 @@ claude mcp add kinlet -e KINLET_AGENT=<paste the code> -- node packages/mcp/dist
 
 Ask the agent to buy a lamp at `http://localhost:7002` (it will call `kinlet_act`). Ask it to buy the chair: the app shows an approval request; approve or deny. Cancel the card in the app and ask again: refused.
 
-To see the same flow without an AI in the loop:
+### Connect Claude with one tap (hosted)
+
+With the all-in-one server running at a public HTTPS address, open Claude → Settings → Connectors → Add custom connector and paste `https://<your host>/mcp`. Claude sends you to the Kinlet sign-in; you pick what the agent may do and press Connect. No code to paste. Disconnect from the home screen at any time.
+
+To see both flows without an AI in the loop (needs `npx playwright install chromium` once):
 
 ```sh
-pnpm test:browser   # drives the web app in Chromium with a virtual passkey and the runtime as the agent
+pnpm test:browser   # local plug-in flow against :7000
+node apps/web/test/oauth.e2e.mjs   # one-tap connect flow against :8080
 ```
+
+### Deploy
+
+Create a Fly.io account, make a deploy token, add it to the GitHub repo as the `FLY_API_TOKEN` secret, and push to `main`. The deploy workflow creates the app and a 1 GB volume and ships the Docker image. Set a repo variable `FLY_APP` to use another app name.
 
 ## How it works, in one paragraph
 

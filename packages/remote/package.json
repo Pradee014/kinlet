@@ -1,0 +1,28 @@
+{
+  "name": "@kinlet/remote",
+  "version": "0.1.0",
+  "description": "Hosted MCP endpoint with OAuth 2.1: Claude and other MCP clients connect by URL and sign in with a passkey. Agent credentials are held encrypted per connection.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@kinlet/core": "workspace:*",
+    "@kinlet/mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "better-sqlite3": "^11.7.0",
+    "hono": "^4.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@kinlet/demo-merchant": "workspace:*",
+    "@kinlet/directory": "workspace:*",
+    "@types/better-sqlite3": "^7.6.12"
+  }
+}

@@ -99,6 +99,17 @@ A service using the Kinlet SDK must refuse, with a distinct reason code, when:
 
 The reason codes are stable strings so that the person's activity feed can show them in plain language.
 
+## 6a. The hosted runtime (one-tap connect)
+
+When a person connects Claude by URL, the agent's key is generated in their browser but then handed
+to Kinlet's server and held there, encrypted at rest (AES-256-GCM, key outside the database), for the
+hosted runtime to sign with. This is a deliberate trade: convenience for the agent key, never for the
+root key. What stays true: the root key never leaves the device; cards, approvals and revocations are
+still signed only there; cancelling the card makes the hosted runtime useless at once; disconnecting
+revokes every token and wipes the credential. What changes: an attacker who breaches the server and
+its secret gets agent keys, bounded by each card's limits and expiry (T7 now also covers A3). People
+who want the agent key only on their own machine use the local plug-in instead.
+
 ## 7. What Kinlet does not protect against (and says so)
 
 - A person who approves a bad action. Kinlet shows exactly what will happen; it cannot judge wisdom.
