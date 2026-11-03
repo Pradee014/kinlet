@@ -1,0 +1,20 @@
+{
+  "name": "@kinlet/core",
+  "version": "0.1.0",
+  "description": "Kinlet card format: keys, cards, signed requests, approvals, verification. Runs in Node and browsers.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "canonicalize": "^2.0.0",
+    "zod": "^3.24.0"
+  }
+}
