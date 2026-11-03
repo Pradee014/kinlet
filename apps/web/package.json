@@ -28,5 +28,18 @@
     "vite": "^6.0.0",
     "@kinlet/mcp": "workspace:*",
     "playwright": "^1.50.0"
+  },
+  "main": "./dist/server/app.js",
+  "types": "./dist/server/app.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server/app.d.ts",
+      "import": "./dist/server/app.js"
+    },
+    "./store": {
+      "types": "./dist/server/store.d.ts",
+      "import": "./dist/server/store.js"
+    },
+    "./package.json": "./package.json"
   }
 }

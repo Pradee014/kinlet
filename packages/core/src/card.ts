@@ -33,6 +33,17 @@ const httpsOrigin = z.string().refine((s) => {
   }
 }, "must be an https origin with no path");
 
+/** The directory may live under a path (one host serving several things). No query, hash or trailing slash. */
+const directoryUrl = z.string().refine((s) => {
+  try {
+    const u = new URL(s);
+    const schemeOk = u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK.has(u.hostname));
+    return schemeOk && u.search === "" && u.hash === "" && u.username === "" && u.password === "" && !s.endsWith("/") && (u.href === s || u.href === s + "/");
+  } catch {
+    return false;
+  }
+}, "must be an https URL with no query or trailing slash");
+
 const actionName = z.union([z.enum(STANDARD_ACTIONS), z.string().url().startsWith("https://")]);
 
 /** Money is validated as a non-negative finite number with at most 2 decimals. */
@@ -76,7 +87,7 @@ export const CardSchema = z
     credentialStatus: z
       .object({
         type: z.literal("KinletDirectoryStatus"),
-        directory: httpsOrigin,
+        directory: directoryUrl,
         serial: z.string().regex(serialRe),
       })
       .strict(),

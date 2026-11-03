@@ -1,0 +1,56 @@
+/** Walks the app and saves a screenshot of each screen. Services must be running. */
+import { chromium } from "playwright";
+import { AgentRuntime, parseCredential } from "@kinlet/mcp";
+
+const WEB = "http://localhost:7000";
+const SHOP = "http://localhost:7002";
+const OUT = process.argv[2] ?? "/tmp/kinlet-demo/shots";
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 420, height: 820 }, deviceScaleFactor: 2 });
+const page = await context.newPage();
+const cdp = await context.newCDPSession(page);
+await cdp.send("WebAuthn.enable");
+await cdp.send("WebAuthn.addVirtualAuthenticator", { options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
+
+await page.goto(WEB);
+await page.fill("#u", "pradeep");
+await shot("1-signin");
+await page.click("#reg");
+await page.waitForSelector("text=Your agents");
+await shot("2-home-empty");
+await page.click("#new");
+await page.fill("#name", "Shopping agent");
+await shot("3-create-agent");
+await page.click("#create");
+await page.waitForSelector("#code");
+const credential = (await page.textContent("#code")).trim();
+await shot("4-connect-code");
+await page.click("#done");
+await page.waitForSelector("text=Activity");
+const serial = new URL(page.url()).hash.split("/").pop();
+await shot("5-agent-new");
+
+const runtime = await AgentRuntime.create({ credential: parseCredential(credential), approvalPollMs: 300, approvalTimeoutMs: 30_000 });
+await runtime.act({ url: SHOP + "/orders", method: "POST", body: JSON.stringify({ sku: "lamp-01" }), action: { type: "purchase", amount: 12.5, currency: "USD", ref: "lamp-01" } });
+const chair = runtime.act({ url: SHOP + "/orders", method: "POST", body: JSON.stringify({ sku: "chair-03" }), action: { type: "purchase", amount: 45, currency: "USD", ref: "chair-03" } });
+await page.waitForSelector("#openApprovals", { timeout: 15_000 });
+await shot("6-approval-banner");
+await page.click("#openApprovals");
+await page.waitForSelector("[data-approve]");
+await shot("7-approval-screen");
+await page.click("[data-approve]");
+await chair;
+await runtime.act({ url: SHOP + "/orders", method: "POST", body: JSON.stringify({ sku: "desk-04" }), action: { type: "purchase", amount: 240, currency: "USD", ref: "desk-04" } });
+await page.goto(`${WEB}/#/agent/${serial}`);
+await page.waitForSelector("text=Buy desk-04");
+await shot("8-activity");
+page.once("dialog", (d) => d.accept());
+await page.click("#revoke");
+await page.waitForSelector("text=cancelled");
+await runtime.act({ url: SHOP + "/orders", method: "POST", body: JSON.stringify({ sku: "mug-02" }), action: { type: "purchase", amount: 8, currency: "USD", ref: "mug-02" } });
+await page.reload();
+await page.waitForSelector("text=Buy mug-02");
+await shot("9-after-cancel");
+await browser.close();
+console.log("done");

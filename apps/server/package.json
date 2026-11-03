@@ -1,0 +1,21 @@
+{
+  "name": "@kinlet/server",
+  "version": "0.1.0",
+  "description": "One process serving the card office, the directory (/d) and the demo shop (/shop) on one origin. What gets deployed.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"server: covered by the browser test\"",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@kinlet/core": "workspace:*",
+    "@kinlet/demo-merchant": "workspace:*",
+    "@kinlet/directory": "workspace:*",
+    "@kinlet/web": "workspace:*",
+    "hono": "^4.6.0"
+  }
+}

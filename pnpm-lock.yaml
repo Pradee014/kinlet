@@ -18,6 +18,27 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.5)
 
+  apps/server:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.13.0
+        version: 1.19.18(hono@4.13.16)
+      '@kinlet/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@kinlet/demo-merchant':
+        specifier: workspace:*
+        version: link:../../packages/demo-merchant
+      '@kinlet/directory':
+        specifier: workspace:*
+        version: link:../../packages/directory
+      '@kinlet/web':
+        specifier: workspace:*
+        version: link:../web
+      hono:
+        specifier: ^4.6.0
+        version: 4.13.16
+
   apps/web:
     dependencies:
       '@hono/node-server':
