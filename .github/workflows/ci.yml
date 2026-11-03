@@ -17,3 +17,15 @@ jobs:
       - run: pnpm -r build
       - run: pnpm -r typecheck
       - run: pnpm -r test
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t kinlet .
+      - name: Smoke test the image
+        run: |
+          docker run -d --name kinlet -p 8080:8080 -e KINLET_PUBLIC_URL=http://localhost:8080 kinlet
+          for i in $(seq 1 30); do curl -sf localhost:8080/config && break; sleep 1; done
+          curl -sf localhost:8080/d/.well-known/kinlet.json
+          curl -sf localhost:8080/shop/catalog > /dev/null
+          docker logs kinlet
