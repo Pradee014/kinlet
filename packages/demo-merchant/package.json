@@ -1,0 +1,21 @@
+{
+  "name": "@kinlet/demo-merchant",
+  "version": "0.1.0",
+  "description": "A tiny shop that accepts Kinlet cards. Shows what a merchant integration looks like.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": { "kinlet-demo-merchant": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@kinlet/core": "workspace:*",
+    "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0"
+  }
+}
