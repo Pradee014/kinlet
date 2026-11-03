@@ -6,7 +6,9 @@
 import { checkCard, MONETARY_ACTIONS, toMinorUnits, type Card } from "./card.js";
 import { verifyApproval } from "./approval.js";
 import { checkStatusDoc } from "./directory.js";
-import { HEADER_SIGNATURE, parseRequest, verifyParsedRequest, type ActionSpec } from "./request.js";
+import { CLOCK_SKEW_S, HEADER_SIGNATURE, parseRequest, verifyParsedRequest, type ActionSpec } from "./request.js";
+
+const CLOCK_SKEW_MS = CLOCK_SKEW_S * 1000;
 
 export type ReasonCode =
   | "card_signature_invalid"
@@ -33,8 +35,11 @@ export interface DirectoryClient {
 }
 
 export interface NonceStore {
-  /** Records the nonce; returns true if it was already present. Entries may expire after `expiresAtMs`. */
-  seen(nonce: string, expiresAtMs: number): Promise<boolean>;
+  /**
+   * Records the nonce; returns true if it was already present. Entries may be dropped once
+   * `nowMs` passes `expiresAtMs` plus the clock-skew allowance. `nowMs` is the verifier's clock.
+   */
+  seen(nonce: string, expiresAtMs: number, nowMs: number): Promise<boolean>;
 }
 
 export interface SpendLedger {
@@ -88,7 +93,7 @@ export async function verifyIncomingRequest(deps: VerifierDeps, req: IncomingReq
   if (!reqCheck.ok) return fail(reqCheck.reason, reqCheck.detail);
 
   // 4. Replay.
-  if (await deps.nonces.seen(p.params.nonce, p.params.expires * 1000)) return fail("request_replayed");
+  if (await deps.nonces.seen(p.params.nonce, p.params.expires * 1000, now.getTime())) return fail("request_replayed");
 
   // 5. Scope: this service, this action.
   let origin: string;
@@ -151,11 +156,10 @@ export async function verifyIncomingRequest(deps: VerifierDeps, req: IncomingReq
 /** In-memory stores for tests and single-process services. Not for multi-instance deployments. */
 export class MemoryNonceStore implements NonceStore {
   private readonly map = new Map<string, number>();
-  async seen(nonce: string, expiresAtMs: number): Promise<boolean> {
-    const now = Date.now();
-    for (const [k, exp] of this.map) if (exp < now) this.map.delete(k);
+  async seen(nonce: string, expiresAtMs: number, nowMs: number): Promise<boolean> {
+    for (const [k, exp] of this.map) if (exp < nowMs) this.map.delete(k);
     if (this.map.has(nonce)) return true;
-    this.map.set(nonce, expiresAtMs + 60_000);
+    this.map.set(nonce, expiresAtMs + CLOCK_SKEW_MS);
     return false;
   }
 }

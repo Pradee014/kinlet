@@ -304,3 +304,14 @@ describe("issuance rules", () => {
     await expect(issueCard({ issuer: person, agentDid: person.did, name: "x", directory: DIRECTORY, permissions: { services: [SHOP], actions: ["read"] } })).rejects.toThrow(/different keys/);
   });
 });
+
+describe("nonce store", () => {
+  it("keeps nonces for the whole window on the verifier's clock, not the wall clock", async () => {
+    const { MemoryNonceStore } = await import("../src/index.js");
+    const store = new MemoryNonceStore();
+    const t0 = Date.parse("2020-01-01T00:00:00Z"); // far in the past relative to the wall clock
+    expect(await store.seen("n1", t0 + 300_000, t0)).toBe(false);
+    expect(await store.seen("n1", t0 + 300_000, t0 + 200_000)).toBe(true);
+    expect(await store.seen("n1", t0 + 300_000, t0 + 361_000)).toBe(false); // expired + skew: may be forgotten
+  });
+});
