@@ -16,6 +16,16 @@ export interface CardRow {
   revocationJson: string | null;
 }
 
+export interface ApprovalRow {
+  id: string;
+  serial: string;
+  issuer: string;
+  requestJson: string;
+  createdAt: string;
+  status: "pending" | "approved" | "denied";
+  token: string | null;
+}
+
 export interface EventRow {
   serial: string;
   seq: number;
@@ -42,6 +52,16 @@ export class Store {
         revocation_json TEXT
       );
       CREATE INDEX IF NOT EXISTS cards_issuer ON cards(issuer);
+      CREATE TABLE IF NOT EXISTS approvals (
+        id TEXT PRIMARY KEY,
+        serial TEXT NOT NULL REFERENCES cards(serial),
+        issuer TEXT NOT NULL,
+        request_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        token TEXT
+      );
+      CREATE INDEX IF NOT EXISTS approvals_issuer ON approvals(issuer, status);
       CREATE TABLE IF NOT EXISTS events (
         serial TEXT NOT NULL REFERENCES cards(serial),
         seq INTEGER NOT NULL,
@@ -94,6 +114,26 @@ export class Store {
 
   events(serial: string, fromSeq = 0, limit = 200): EventRow[] {
     return this.db.prepare("SELECT serial, seq, hash, json FROM events WHERE serial = ? AND seq >= ? ORDER BY seq ASC LIMIT ?").all(serial, fromSeq, limit) as EventRow[];
+  }
+
+  insertApproval(row: ApprovalRow): void {
+    this.db.prepare("INSERT INTO approvals (id, serial, issuer, request_json, created_at, status, token) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(row.id, row.serial, row.issuer, row.requestJson, row.createdAt, row.status, row.token);
+  }
+
+  getApproval(id: string): ApprovalRow | undefined {
+    const r = this.db.prepare("SELECT id, serial, issuer, request_json, created_at, status, token FROM approvals WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    if (!r) return undefined;
+    return { id: r["id"] as string, serial: r["serial"] as string, issuer: r["issuer"] as string, requestJson: r["request_json"] as string, createdAt: r["created_at"] as string, status: r["status"] as ApprovalRow["status"], token: (r["token"] as string | null) ?? null };
+  }
+
+  pendingApprovals(issuer: string): ApprovalRow[] {
+    const rows = this.db.prepare("SELECT id FROM approvals WHERE issuer = ? AND status = 'pending' ORDER BY created_at ASC").all(issuer) as { id: string }[];
+    return rows.map((r) => this.getApproval(r.id)).filter((a): a is ApprovalRow => a !== undefined);
+  }
+
+  resolveApproval(id: string, status: "approved" | "denied", token: string | null): void {
+    this.db.prepare("UPDATE approvals SET status = ?, token = ? WHERE id = ? AND status = 'pending'").run(status, token, id);
   }
 
   close(): void {

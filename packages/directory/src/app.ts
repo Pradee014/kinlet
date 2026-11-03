@@ -213,6 +213,82 @@ export function createDirectoryApp(opts: DirectoryOptions): Hono {
     return c.json({ issuer: did, cards });
   });
 
+  // ---- Approval relay ----
+  // The agent runtime posts a request for consent; the person's app fetches pending ones, signs a
+  // token (or denies), and posts the answer; the runtime polls for it. The directory never signs
+  // anything here, so it cannot approve on the person's behalf.
+
+  const ApprovalRequestSchema = z
+    .object({
+      type: z.literal("KinletApprovalRequest"),
+      card: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/),
+      target: z.string().url(),
+      action: z.record(z.unknown()),
+      nonce: z.string().regex(/^[A-Za-z0-9_-]{22,64}$/),
+      at: z.string().datetime({ offset: false }),
+      proof: ProofSchema,
+    })
+    .strict();
+
+  app.post("/v1/cards/:serial/approvals", async (c) => {
+    if (!limiter.allow(clientKey(c), now().getTime())) return c.json({ error: "rate_limited" }, 429);
+    const serial = c.req.param("serial");
+    const row = store.getCard(serial);
+    if (!row) return c.json({ error: "card_unknown" }, 404);
+    if (row.revokedAt) return c.json({ error: "card_revoked" }, 403);
+    let body: unknown;
+    try {
+      body = await readJson(c);
+    } catch {
+      return c.json({ error: "bad_request" }, 400);
+    }
+    const parsed = ApprovalRequestSchema.safeParse(body);
+    if (!parsed.success || parsed.data.card !== serial) return c.json({ error: "bad_request" }, 400);
+    const age = now().getTime() - Date.parse(parsed.data.at);
+    if (age > OWNER_PROOF_MAX_AGE_MS || age < -OWNER_PROOF_MAX_AGE_MS) return c.json({ error: "bad_request", detail: "stale" }, 400);
+    const ok = await verifyDocument(parsed.data, row.subject);
+    if (!ok.ok) return c.json({ error: "bad_request", detail: "not signed by the card's agent" }, 400);
+    const id = "apr_" + parsed.data.nonce;
+    if (store.getApproval(id)) return c.json({ error: "conflict" }, 409);
+    store.insertApproval({ id, serial, issuer: row.issuer, requestJson: JSON.stringify(parsed.data), createdAt: now().toISOString(), status: "pending", token: null });
+    return c.json({ id, status: "pending" }, 201);
+  });
+
+  app.get("/v1/issuers/:did/approvals", async (c) => {
+    const did = c.req.param("did");
+    const owner = await ownerFromProof(c);
+    if (owner !== did) return c.json({ error: "unauthorized" }, 401);
+    const pending = store.pendingApprovals(did).map((a) => ({ id: a.id, serial: a.serial, createdAt: a.createdAt, request: JSON.parse(a.requestJson) as unknown }));
+    return c.json({ issuer: did, pending });
+  });
+
+  app.post("/v1/approvals/:id/answer", async (c) => {
+    const id = c.req.param("id");
+    const a = store.getApproval(id);
+    if (!a) return c.json({ error: "not_found" }, 404);
+    const owner = await ownerFromProof(c);
+    if (owner !== a.issuer) return c.json({ error: "unauthorized" }, 401);
+    let body: unknown;
+    try {
+      body = await readJson(c);
+    } catch {
+      return c.json({ error: "bad_request" }, 400);
+    }
+    const parsed = z.object({ decision: z.enum(["approved", "denied"]), token: z.string().max(8192).optional() }).strict().safeParse(body);
+    if (!parsed.success) return c.json({ error: "bad_request" }, 400);
+    if (parsed.data.decision === "approved" && !parsed.data.token) return c.json({ error: "bad_request", detail: "token required" }, 400);
+    if (a.status !== "pending") return c.json({ error: "conflict" }, 409);
+    store.resolveApproval(id, parsed.data.decision, parsed.data.decision === "approved" ? (parsed.data.token as string) : null);
+    return c.json({ id, status: parsed.data.decision });
+  });
+
+  app.get("/v1/approvals/:id", async (c) => {
+    const a = store.getApproval(c.req.param("id"));
+    if (!a) return c.json({ error: "not_found" }, 404);
+    // The token is useless without the agent key and is bound to one nonce, so no auth is needed here.
+    return c.json({ id: a.id, status: a.status, token: a.status === "approved" ? a.token : null });
+  });
+
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((_err, c) => c.json({ error: "internal" }, 500));
 

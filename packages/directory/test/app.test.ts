@@ -116,3 +116,42 @@ describe("directory", () => {
     expect(Object.keys(row).sort()).toEqual(["issuer", "registeredAt", "revocationJson", "revokedAt", "serial", "subject", "validFrom", "validUntil"]);
   });
 });
+
+describe("approval relay", () => {
+  it("relays a request and an answer without being able to forge either", async () => {
+    const s = await setup();
+    const serial = s.card.credentialStatus.serial;
+    await s.call("/v1/cards", s.json(s.card));
+    const { signDocument, createApproval, approvalRequestFor, newNonce } = await import("@kinlet/core");
+    const nonce = newNonce();
+    const reqDoc = { type: "KinletApprovalRequest" as const, card: serial, target: "https://shop.test/orders", action: { type: "purchase", amount: 45, currency: "USD" }, nonce, at: s.now().toISOString() };
+    // Signed by the wrong key: rejected.
+    const forged = await signDocument(reqDoc, s.person, { created: s.now() });
+    expect((await s.call(`/v1/cards/${serial}/approvals`, s.json(forged))).status).toBe(400);
+    const signed = await signDocument(reqDoc, s.agent, { created: s.now() });
+    const created = await s.call(`/v1/cards/${serial}/approvals`, s.json(signed));
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    // Pending for the owner only.
+    const proof = await createOwnerProof(s.person, s.now());
+    const list = (await (await s.call(`/v1/issuers/${encodeURIComponent(s.person.did)}/approvals`, { headers: { "kinlet-owner-proof": proof } })).json()) as { pending: { id: string }[] };
+    expect(list.pending.map((p) => p.id)).toEqual([id]);
+
+    // Still pending from the runtime's view.
+    expect(((await (await s.call(`/v1/approvals/${id}`)).json()) as { status: string }).status).toBe("pending");
+
+    // A stranger cannot answer.
+    const stranger = await generateKeyPair();
+    expect((await s.call(`/v1/approvals/${id}/answer`, s.json({ decision: "denied" }, { "kinlet-owner-proof": await createOwnerProof(stranger, s.now()) }))).status).toBe(401);
+
+    // The owner answers with a real token.
+    const token = await createApproval(approvalRequestFor(s.card, "https://shop.test/orders", reqDoc.action, nonce), s.person, s.now());
+    expect((await s.call(`/v1/approvals/${id}/answer`, s.json({ decision: "approved", token }, { "kinlet-owner-proof": proof }))).status).toBe(200);
+    const got = (await (await s.call(`/v1/approvals/${id}`)).json()) as { status: string; token: string };
+    expect(got.status).toBe("approved");
+    expect(got.token).toBe(token);
+    // Answering twice is a conflict.
+    expect((await s.call(`/v1/approvals/${id}/answer`, s.json({ decision: "denied" }, { "kinlet-owner-proof": proof }))).status).toBe(409);
+  });
+});
